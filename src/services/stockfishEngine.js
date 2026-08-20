@@ -5,7 +5,7 @@ export class StockfishEngine {
     this.onReady = null;
     this.onBestMove = null;
     this.onEvaluation = null;
-    this.pendingResolve = null;
+    this.onError = null;
   }
 
   init() {
@@ -16,73 +16,83 @@ export class StockfishEngine {
     const enginePath =
       `${import.meta.env.BASE_URL}stockfish/stockfish-18-lite.js`;
 
-    this.worker = new Worker(enginePath);
+    try {
+      this.worker = new Worker(enginePath);
 
-    this.worker.onmessage = (event) => {
-      const message =
-        typeof event.data === "string"
-          ? event.data
-          : String(event.data);
+      this.worker.onmessage = (event) => {
+        const message =
+          typeof event.data === "string"
+            ? event.data
+            : String(event.data);
 
-      console.log("Stockfish:", message);
-
-      if (message === "uciok") {
-        this.worker.postMessage("isready");
-      }
-
-      if (message === "readyok") {
-        this.ready = true;
-
-        if (this.onReady) {
-          this.onReady();
-        }
-      }
-
-      if (message.startsWith("info")) {
-        const centipawnMatch =
-          message.match(/score cp (-?\d+)/);
-
-        const mateMatch =
-          message.match(/score mate (-?\d+)/);
-
-        if (centipawnMatch && this.onEvaluation) {
-          const evaluation =
-            Number(centipawnMatch[1]) / 100;
-
-          this.onEvaluation({
-            type: "centipawn",
-            value: evaluation,
-          });
+        if (message === "uciok") {
+          this.worker.postMessage("isready");
+          return;
         }
 
-        if (mateMatch && this.onEvaluation) {
-          this.onEvaluation({
-            type: "mate",
-            value: Number(mateMatch[1]),
-          });
+        if (message === "readyok") {
+          this.ready = true;
+
+          if (this.onReady) {
+            this.onReady();
+          }
+
+          return;
         }
-      }
 
-      if (message.startsWith("bestmove")) {
-        const parts = message.split(" ");
-        const bestMove = parts[1];
+        if (message.startsWith("info")) {
+          const centipawnMatch =
+            message.match(/score cp (-?\d+)/);
 
-        if (
-          bestMove &&
-          bestMove !== "(none)" &&
-          this.onBestMove
-        ) {
-          this.onBestMove(bestMove);
+          const mateMatch =
+            message.match(/score mate (-?\d+)/);
+
+          if (centipawnMatch && this.onEvaluation) {
+            this.onEvaluation({
+              type: "centipawn",
+              value: Number(centipawnMatch[1]) / 100,
+            });
+          }
+
+          if (mateMatch && this.onEvaluation) {
+            this.onEvaluation({
+              type: "mate",
+              value: Number(mateMatch[1]),
+            });
+          }
         }
+
+        if (message.startsWith("bestmove")) {
+          const parts = message.split(" ");
+          const bestMove = parts[1];
+
+          if (
+            bestMove &&
+            bestMove !== "(none)" &&
+            this.onBestMove
+          ) {
+            this.onBestMove(bestMove);
+          }
+        }
+      };
+
+      this.worker.onerror = (error) => {
+        console.error("Stockfish chyba:", error);
+        this.ready = false;
+
+        if (this.onError) {
+          this.onError(error);
+        }
+      };
+
+      this.worker.postMessage("uci");
+    } catch (error) {
+      console.error("Stockfish sa nepodarilo spustiť:", error);
+
+      if (this.onError) {
+        this.onError(error);
       }
-    };
-
-    this.worker.onerror = (error) => {
-      console.error("Stockfish Worker chyba:", error);
-      this.ready = false;
-    };
-
-    this.worker.postMessage("uci");
+    }
   }
 
   setLevel(elo) {
@@ -90,33 +100,27 @@ export class StockfishEngine {
       return;
     }
 
-    const limitedElo = Math.max(
-      800,
-      Math.min(2800, Number(elo))
+    const numericElo = Number(elo);
+
+    const skillMap = {
+      800: 0,
+      1000: 2,
+      1200: 4,
+      1500: 7,
+    };
+
+    const skillLevel = skillMap[numericElo] ?? 2;
+
+    this.worker.postMessage(
+      "setoption name UCI_LimitStrength value false"
     );
 
     this.worker.postMessage(
-      "setoption name UCI_LimitStrength value true"
-    );
-
-    this.worker.postMessage(
-      `setoption name UCI_Elo value ${limitedElo}`
+      `setoption name Skill Level value ${skillLevel}`
     );
   }
 
   findBestMove(fen, depth = 10) {
-    if (!this.worker || !this.ready) {
-      return false;
-    }
-
-    this.worker.postMessage("stop");
-    this.worker.postMessage(`position fen ${fen}`);
-    this.worker.postMessage(`go depth ${depth}`);
-
-    return true;
-  }
-
-  analyze(fen, depth = 12) {
     if (!this.worker || !this.ready) {
       return false;
     }
@@ -145,12 +149,14 @@ export class StockfishEngine {
   }
 
   destroy() {
-    if (this.worker) {
-      this.worker.postMessage("quit");
-      this.worker.terminate();
-      this.worker = null;
-      this.ready = false;
+    if (!this.worker) {
+      return;
     }
+
+    this.worker.postMessage("quit");
+    this.worker.terminate();
+    this.worker = null;
+    this.ready = false;
   }
 }
 
