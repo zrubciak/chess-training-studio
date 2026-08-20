@@ -1,255 +1,234 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
+
+const PIECE_VALUES = {
+  p: 1,
+  n: 3,
+  b: 3,
+  r: 5,
+  q: 9,
+  k: 100,
+};
 
 export default function App() {
   const [game, setGame] = useState(() => new Chess());
   const [moves, setMoves] = useState([]);
+  const [boardOrientation, setBoardOrientation] = useState("white");
+  const [computerElo, setComputerElo] = useState(1000);
+  const [isComputerThinking, setIsComputerThinking] = useState(false);
+  const [gameStatus, setGameStatus] = useState("Na ťahu: biely");
   const [coachMessage, setCoachMessage] = useState(
-    "Urob prvý ťah. Hráš bielymi."
-  );
-  const [boardOrientation, setBoardOrientation] =
-    useState("white");
-  const [isComputerThinking, setIsComputerThinking] =
-    useState(false);
-  const [gameStatus, setGameStatus] = useState(
-    "Na ťahu: biely"
+    "Urob prvý ťah. Odporúčam e4 alebo d4."
   );
 
-  function getCoachComment(move, currentGame) {
+  const gameRef = useRef(new Chess());
+  const timerRef = useRef(null);
+
+  function describePosition(currentGame) {
     if (currentGame.isCheckmate()) {
-      return "🏆 Šach-mat! Partia sa skončila.";
-    }
-
-    if (currentGame.inCheck()) {
-      return "⚔️ Šach! Súperov kráľ je napadnutý.";
-    }
-
-    if (move.san === "e4" || move.san === "d4") {
-      return "✅ 9/10 – Výborné. Bojuješ o centrum a otváraš figúry.";
-    }
-
-    if (move.piece === "n") {
-      return "✅ 8/10 – Dobrý vývin jazdca. Jazdci patria v otvorení bližšie k centru.";
-    }
-
-    if (move.piece === "b") {
-      return "✅ 8/10 – Dobrý vývin strelca. Pripravuj si rošádu.";
-    }
-
-    if (move.san.includes("O-O")) {
-      return "✅ 10/10 – Výborne. Rošádou si zvýšil bezpečnosť kráľa.";
-    }
-
-    if (move.captured) {
-      return "🔎 7/10 – Vzal si súperovu figúru. Skontroluj, či súper nemôže vziať tvoju figúru späť.";
-    }
-
-    if (move.piece === "q" && moves.length < 8) {
-      return "⚠️ 5/10 – Dámu vyvíjaš pomerne skoro. Súper ju môže napádať a získavať tempo.";
-    }
-
-    if (move.piece === "p") {
-      return "👍 7/10 – Legálny pešiakový ťah. Sleduj, či pomáha centru alebo vývinu.";
-    }
-
-    return "👍 7/10 – Legálny ťah. Pred ďalším ťahom skontroluj súperove hrozby.";
-  }
-
-  function updateGameStatus(currentGame) {
-    if (currentGame.isCheckmate()) {
-      const winner =
-        currentGame.turn() === "w" ? "čierny" : "biely";
-
-      setGameStatus(`Šach-mat – vyhral ${winner}`);
-      return;
+      const winner = currentGame.turn() === "w" ? "čierny" : "biely";
+      return `Šach-mat – vyhral ${winner}`;
     }
 
     if (currentGame.isStalemate()) {
-      setGameStatus("Pat – partia je remíza");
-      return;
+      return "Pat – partia skončila remízou";
     }
 
     if (currentGame.isThreefoldRepetition()) {
-      setGameStatus(
-        "Remíza – pozícia sa zopakovala trikrát"
-      );
-      return;
+      return "Remíza – pozícia sa opakovala trikrát";
     }
 
     if (currentGame.isInsufficientMaterial()) {
-      setGameStatus(
-        "Remíza – nedostatok materiálu na mat"
-      );
-      return;
+      return "Remíza – nedostatok materiálu";
     }
 
     if (currentGame.isDraw()) {
-      setGameStatus("Partia je remíza");
-      return;
+      return "Partia skončila remízou";
+    }
+
+    const side = currentGame.turn() === "w" ? "biely" : "čierny";
+
+    return currentGame.inCheck()
+      ? `Na ťahu: ${side} – ŠACH`
+      : `Na ťahu: ${side}`;
+  }
+
+  function getCoachComment(move, currentGame) {
+    if (currentGame.isCheckmate()) {
+      return "🏆 Šach-mat! Partiu si ukončil víťazstvom.";
     }
 
     if (currentGame.inCheck()) {
-      const side =
-        currentGame.turn() === "w" ? "biely" : "čierny";
-
-      setGameStatus(`Na ťahu: ${side} – ŠACH`);
-      return;
+      return "⚔️ Dávaš súperovi šach. Skontroluj všetky súperove odpovede.";
     }
 
-    const side =
-      currentGame.turn() === "w" ? "biely" : "čierny";
+    if (move.san === "e4" || move.san === "d4") {
+      return "✅ 9/10 – Výborný boj o centrum a otvorenie ciest pre figúry.";
+    }
 
-    setGameStatus(`Na ťahu: ${side}`);
+    if (move.piece === "n") {
+      return "✅ 8/10 – Dobrý vývin jazdca. Jazdec smeruje bližšie k centru.";
+    }
+
+    if (move.piece === "b") {
+      return "✅ 8/10 – Vyvíjaš strelca a približuješ sa k rošáde.";
+    }
+
+    if (move.san.includes("O-O")) {
+      return "✅ 10/10 – Výborne. Rošáda zvýšila bezpečnosť kráľa.";
+    }
+
+    if (move.captured) {
+      return "🔎 7/10 – Získal si materiál. Skontroluj, či súper nemôže figúru vziať späť.";
+    }
+
+    if (move.piece === "q" && currentGame.history().length < 10) {
+      return "⚠️ 5/10 – Dámu vyvíjaš skoro. Súper ju môže napádať a získavať tempo.";
+    }
+
+    if (move.piece === "p") {
+      return "👍 7/10 – Legálny pešiakový ťah. Sleduj, či podporuje centrum alebo vývin.";
+    }
+
+    return "👍 7/10 – Legálny ťah. Teraz skontroluj súperove šachy, brania a hrozby.";
+  }
+
+  function scoreComputerMove(currentGame, candidate) {
+    let score = Math.random() * 3;
+
+    if (candidate.captured) {
+      score += PIECE_VALUES[candidate.captured] * 12;
+      score -= PIECE_VALUES[candidate.piece] * 0.5;
+    }
+
+    if (candidate.san.includes("#")) {
+      score += 10000;
+    } else if (candidate.san.includes("+")) {
+      score += 15;
+    }
+
+    if (candidate.san.includes("O-O")) {
+      score += 8;
+    }
+
+    const importantCenterSquares = ["d4", "e4", "d5", "e5"];
+
+    if (importantCenterSquares.includes(candidate.to)) {
+      score += 5;
+    }
+
+    if (
+      currentGame.history().length < 12 &&
+      (candidate.piece === "n" || candidate.piece === "b")
+    ) {
+      score += 4;
+    }
+
+    if (
+      currentGame.history().length < 10 &&
+      candidate.piece === "q" &&
+      !candidate.captured
+    ) {
+      score -= 4;
+    }
+
+    return score;
   }
 
   function chooseComputerMove(currentGame) {
-    const legalMoves = currentGame.moves({
-      verbose: true,
-    });
+    const legalMoves = currentGame.moves({ verbose: true });
 
     if (legalMoves.length === 0) {
       return null;
     }
 
-    const pieceValues = {
-      p: 1,
-      n: 3,
-      b: 3,
-      r: 5,
-      q: 9,
-      k: 100,
-    };
+    const rankedMoves = legalMoves
+      .map((candidate) => ({
+        candidate,
+        score: scoreComputerMove(currentGame, candidate),
+      }))
+      .sort((a, b) => b.score - a.score);
 
-    const scoredMoves = legalMoves.map((move) => {
-      let score = Math.random() * 2;
+    let candidateCount = 5;
 
-      if (move.captured) {
-        score += pieceValues[move.captured] * 10;
-        score -= pieceValues[move.piece] * 0.5;
-      }
+    if (computerElo === 1000) {
+      candidateCount = 3;
+    }
 
-      if (move.san.includes("+")) {
-        score += 5;
-      }
+    if (computerElo === 1200) {
+      candidateCount = 1;
+    }
 
-      if (move.san.includes("#")) {
-        score += 1000;
-      }
-
-      if (move.san.includes("O-O")) {
-        score += 4;
-      }
-
-      if (
-        move.to === "e5" ||
-        move.to === "d5" ||
-        move.to === "e4" ||
-        move.to === "d4"
-      ) {
-        score += 3;
-      }
-
-      if (
-        (move.piece === "n" || move.piece === "b") &&
-        currentGame.history().length < 12
-      ) {
-        score += 2;
-      }
-
-      return {
-        move,
-        score,
-      };
-    });
-
-    scoredMoves.sort((a, b) => b.score - a.score);
-
-    const numberOfCandidates = Math.min(
-      3,
-      scoredMoves.length
+    const availableCandidates = Math.min(
+      candidateCount,
+      rankedMoves.length
     );
 
     const selectedIndex = Math.floor(
-      Math.random() * numberOfCandidates
+      Math.random() * availableCandidates
     );
 
-    return scoredMoves[selectedIndex].move;
+    return rankedMoves[selectedIndex].candidate;
   }
 
   function makeComputerMove(positionAfterPlayerMove) {
     setIsComputerThinking(true);
+    setCoachMessage(`🤖 Súper ELO ${computerElo} premýšľa...`);
 
-    window.setTimeout(() => {
-      const computerGame = new Chess(
-        positionAfterPlayerMove.fen()
-      );
+    timerRef.current = window.setTimeout(() => {
+      const computerGame = new Chess(positionAfterPlayerMove.fen());
 
       if (computerGame.isGameOver()) {
         setIsComputerThinking(false);
-        updateGameStatus(computerGame);
+        setGameStatus(describePosition(computerGame));
         return;
       }
 
-      const selectedMove =
-        chooseComputerMove(computerGame);
+      const selectedMove = chooseComputerMove(computerGame);
 
       if (!selectedMove) {
         setIsComputerThinking(false);
-        updateGameStatus(computerGame);
+        setGameStatus(describePosition(computerGame));
         return;
       }
 
       const computerMove = computerGame.move({
         from: selectedMove.from,
         to: selectedMove.to,
-        promotion: "q",
+        promotion: selectedMove.promotion || "q",
       });
 
+      gameRef.current = computerGame;
       setGame(computerGame);
       setMoves(computerGame.history());
+      setGameStatus(describePosition(computerGame));
+      setIsComputerThinking(false);
 
       if (computerGame.isCheckmate()) {
         setCoachMessage(
-          `🤖 Počítač zahral ${computerMove.san}. Šach-mat. Pozrime sa, kde sa obrana pokazila.`
+          `🤖 Súper zahral ${computerMove.san}. Šach-mat. Poďme neskôr nájsť rozhodujúcu chybu.`
         );
       } else if (computerGame.inCheck()) {
         setCoachMessage(
-          `🤖 Počítač zahral ${computerMove.san} a dáva ti šach. Najprv musíš vyriešiť ohrozenie kráľa.`
+          `🤖 Súper zahral ${computerMove.san} a dáva ti šach. Najprv vyrieš bezpečnosť kráľa.`
         );
       } else {
         setCoachMessage(
-          `🤖 Počítač zahral ${computerMove.san}. Teraz si na ťahu. Skontroluj napadnuté a nechránené figúry.`
+          `🤖 Súper zahral ${computerMove.san}. Si na ťahu – skontroluj šachy, brania a hrozby.`
         );
       }
-
-      updateGameStatus(computerGame);
-      setIsComputerThinking(false);
     }, 650);
   }
 
   function onDrop(sourceSquare, targetSquare) {
-    if (isComputerThinking) {
-      return false;
-    }
-
-    if (game.isGameOver()) {
-      setCoachMessage(
-        "Partia sa už skončila. Klikni na Nová partia."
-      );
-      return false;
-    }
-
-    if (game.turn() !== "w") {
-      setCoachMessage(
-        "Počkaj, teraz je na ťahu počítač."
-      );
+    if (isComputerThinking || game.isGameOver() || game.turn() !== "w") {
       return false;
     }
 
     const gameCopy = new Chess(game.fen());
 
-    let move;
+    let move = null;
 
     try {
       move = gameCopy.move({
@@ -265,12 +244,11 @@ export default function App() {
       return false;
     }
 
+    gameRef.current = gameCopy;
     setGame(gameCopy);
     setMoves(gameCopy.history());
-    setCoachMessage(
-      getCoachComment(move, gameCopy)
-    );
-    updateGameStatus(gameCopy);
+    setGameStatus(describePosition(gameCopy));
+    setCoachMessage(getCoachComment(move, gameCopy));
 
     if (!gameCopy.isGameOver()) {
       makeComputerMove(gameCopy);
@@ -280,132 +258,92 @@ export default function App() {
   }
 
   function newGame() {
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+    }
+
     const freshGame = new Chess();
 
+    gameRef.current = freshGame;
     setGame(freshGame);
     setMoves([]);
-    setCoachMessage(
-      "Nová partia pripravená. Hráš bielymi. Skús ovládnuť centrum."
-    );
-    setGameStatus("Na ťahu: biely");
     setIsComputerThinking(false);
+    setGameStatus("Na ťahu: biely");
+    setCoachMessage(
+      "Nová partia pripravená. Hráš bielymi. Skús e4 alebo d4."
+    );
   }
 
   function flipBoard() {
-    setBoardOrientation((previousOrientation) =>
-      previousOrientation === "white"
-        ? "black"
-        : "white"
+    setBoardOrientation((current) =>
+      current === "white" ? "black" : "white"
     );
   }
 
-  function createMoveRows() {
-    const rows = [];
-
-    for (let index = 0; index < moves.length; index += 2) {
-      rows.push({
-        number: index / 2 + 1,
-        white: moves[index] || "",
-        black: moves[index + 1] || "",
-      });
-    }
-
-    return rows;
+  function changeComputerElo(event) {
+    const newElo = Number(event.target.value);
+    setComputerElo(newElo);
+    setCoachMessage(`Úroveň automatického súpera bola nastavená na ELO ${newElo}.`);
   }
 
-  const moveRows = createMoveRows();
+  const moveRows = [];
+
+  for (let index = 0; index < moves.length; index += 2) {
+    moveRows.push({
+      number: index / 2 + 1,
+      white: moves[index] || "",
+      black: moves[index + 1] || "",
+    });
+  }
 
   return (
-    <div
-      style={{
-        background: "#071226",
-        minHeight: "100vh",
-        color: "white",
-        padding: "20px",
-        fontFamily:
-          '"Segoe UI", Arial, sans-serif',
-        boxSizing: "border-box",
-      }}
-    >
-      <h1
-        style={{
-          textAlign: "center",
-          margin: "0 0 10px",
-        }}
-      >
-        ♟️ Chess Training Studio
-      </h1>
+    <div style={styles.page}>
+      <header style={styles.header}>
+        <h1 style={{ margin: 0 }}>♟️ Chess Training Studio</h1>
+        <p style={styles.subtitle}>
+          Ivanov osobný tréner | ELO 900 → 1000+
+        </p>
+      </header>
 
-      <p
-        style={{
-          textAlign: "center",
-          marginBottom: "20px",
-        }}
-      >
-        Ivanov osobný tréner | ELO 900 → 1000+
-      </p>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            "minmax(220px, 260px) minmax(420px, 700px) minmax(280px, 340px)",
-          gap: "20px",
-          justifyContent: "center",
-          alignItems: "start",
-        }}
-      >
-        {/* PROFIL */}
-        <aside style={panelStyle}>
+      <div style={styles.layout}>
+        <aside style={styles.panel}>
           <h2>👤 Profil</h2>
-
-          <p>
-            <strong>Ivan Zrubec</strong>
-          </p>
-
-          <p>ELO: 900</p>
+          <p><strong>Ivan Zrubec</strong></p>
+          <p>Aktuálne ELO: 900</p>
           <p>Cieľ: 1000+</p>
 
-          <hr style={dividerStyle} />
+          <hr style={styles.divider} />
+
+          <h3>🤖 Automatický súper</h3>
+
+          <label htmlFor="computerElo">Úroveň súpera</label>
+
+          <select
+            id="computerElo"
+            value={computerElo}
+            onChange={changeComputerElo}
+            style={styles.select}
+            disabled={isComputerThinking}
+          >
+            <option value={800}>ELO 800 – ľahký</option>
+            <option value={1000}>ELO 1000 – môj cieľ</option>
+            <option value={1200}>ELO 1200 – výzva</option>
+          </select>
+
+          <hr style={styles.divider} />
 
           <h3>📈 Pokrok</h3>
 
-          <div
-            style={{
-              height: "20px",
-              background: "#334155",
-              borderRadius: "10px",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                width: "90%",
-                height: "100%",
-                background:
-                  "linear-gradient(90deg, #22c55e, #10b981)",
-              }}
-            />
+          <div style={styles.progressBackground}>
+            <div style={styles.progressFill} />
           </div>
 
-          <p style={{ textAlign: "center" }}>
-            900 / 1000
-          </p>
-
-          <hr style={dividerStyle} />
-
-          <h3>🎯 Dnešný tréning</h3>
-
-          <ul style={{ lineHeight: 1.8 }}>
-            <li>✅ 3 puzzle</li>
-            <li>✅ 1 tréningová partia</li>
-            <li>✅ Analýza Lichess</li>
-          </ul>
+          <p style={{ textAlign: "center" }}>900 / 1000</p>
 
           <button
             type="button"
             onClick={newGame}
-            style={buttonStyleBlue}
+            style={styles.blueButton}
           >
             🔄 Nová partia
           </button>
@@ -413,23 +351,14 @@ export default function App() {
           <button
             type="button"
             onClick={flipBoard}
-            style={buttonStyleGreen}
+            style={styles.greenButton}
           >
             🔃 Otočiť šachovnicu
           </button>
         </aside>
 
-        {/* ŠACHOVNICA */}
         <main>
-          <div
-            style={{
-              background: "#111c31",
-              borderRadius: "16px",
-              padding: "14px",
-              boxShadow:
-                "0 12px 30px rgba(0, 0, 0, 0.3)",
-            }}
-          >
+          <div style={styles.boardContainer}>
             <Chessboard
               position={game.fen()}
               boardOrientation={boardOrientation}
@@ -437,39 +366,21 @@ export default function App() {
             />
           </div>
 
-          <div
-            style={{
-              marginTop: "12px",
-              padding: "12px 16px",
-              background: "#1e2b45",
-              borderRadius: "12px",
-              textAlign: "center",
-              fontWeight: 700,
-            }}
-          >
+          <div style={styles.status}>
             {isComputerThinking
-              ? "🤖 Počítač premýšľa..."
+              ? "🤖 Automatický súper premýšľa..."
               : gameStatus}
           </div>
         </main>
 
-        {/* AI COACH */}
-        <aside style={panelStyle}>
+        <aside style={styles.panel}>
           <h2>🤖 AI Coach</h2>
 
-          <div
-            style={{
-              background: "#0f1b31",
-              borderLeft: "4px solid #22c55e",
-              padding: "12px",
-              borderRadius: "8px",
-              lineHeight: 1.5,
-            }}
-          >
+          <div style={styles.coachBox}>
             {coachMessage}
           </div>
 
-          <hr style={dividerStyle} />
+          <hr style={styles.divider} />
 
           <h3>🧠 Pred každým ťahom</h3>
 
@@ -480,7 +391,7 @@ export default function App() {
             <li>Mám šach, branie alebo hrozbu?</li>
           </ul>
 
-          <hr style={dividerStyle} />
+          <hr style={styles.divider} />
 
           <h3>📖 História ťahov</h3>
 
@@ -489,36 +400,13 @@ export default function App() {
               Zatiaľ nebol vykonaný žiadny ťah.
             </p>
           ) : (
-            <div
-              style={{
-                maxHeight: "280px",
-                overflowY: "auto",
-              }}
-            >
+            <div style={styles.moveHistory}>
               {moveRows.map((row) => (
-                <div
-                  key={row.number}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                      "38px 1fr 1fr",
-                    gap: "8px",
-                    padding: "8px",
-                    marginBottom: "5px",
-                    background: "#0f1b31",
-                    borderRadius: "8px",
-                  }}
-                >
-                  <span
-                    style={{
-                      color: "#94a3b8",
-                    }}
-                  >
+                <div key={row.number} style={styles.moveRow}>
+                  <span style={{ color: "#94a3b8" }}>
                     {row.number}.
                   </span>
-
                   <strong>{row.white}</strong>
-
                   <strong>{row.black}</strong>
                 </div>
               ))}
@@ -530,39 +418,115 @@ export default function App() {
   );
 }
 
-const panelStyle = {
-  background: "#1e2b45",
-  borderRadius: "16px",
-  padding: "20px",
-  boxShadow: "0 12px 30px rgba(0, 0, 0, 0.22)",
-};
-
-const dividerStyle = {
-  border: "none",
-  borderTop: "1px solid #64748b",
-  margin: "20px 0",
-};
-
-const buttonStyleBlue = {
-  width: "100%",
-  padding: "12px",
-  marginTop: "10px",
-  border: "none",
-  borderRadius: "10px",
-  background: "#2563eb",
-  color: "white",
-  fontWeight: 700,
-  cursor: "pointer",
-};
-
-const buttonStyleGreen = {
-  width: "100%",
-  padding: "12px",
-  marginTop: "10px",
-  border: "none",
-  borderRadius: "10px",
-  background: "#16a34a",
-  color: "white",
-  fontWeight: 700,
-  cursor: "pointer",
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#071226",
+    color: "white",
+    fontFamily: '"Segoe UI", Arial, sans-serif',
+  },
+  header: {
+    textAlign: "center",
+    padding: "22px",
+  },
+  subtitle: {
+    margin: "8px 0 0",
+    color: "#cbd5e1",
+  },
+  layout: {
+    display: "grid",
+    gridTemplateColumns:
+      "minmax(230px, 270px) minmax(420px, 700px) minmax(290px, 350px)",
+    gap: "20px",
+    justifyContent: "center",
+    alignItems: "start",
+    padding: "0 20px 30px",
+  },
+  panel: {
+    background: "#1e2b45",
+    borderRadius: "16px",
+    padding: "20px",
+    boxShadow: "0 12px 30px rgba(0, 0, 0, 0.25)",
+  },
+  boardContainer: {
+    background: "#111c31",
+    borderRadius: "16px",
+    padding: "14px",
+    boxShadow: "0 12px 30px rgba(0, 0, 0, 0.3)",
+  },
+  divider: {
+    border: "none",
+    borderTop: "1px solid #64748b",
+    margin: "20px 0",
+  },
+  select: {
+    width: "100%",
+    marginTop: "8px",
+    padding: "11px",
+    background: "#0f1b31",
+    color: "white",
+    border: "1px solid #64748b",
+    borderRadius: "9px",
+  },
+  progressBackground: {
+    height: "18px",
+    background: "#334155",
+    borderRadius: "10px",
+    overflow: "hidden",
+  },
+  progressFill: {
+    width: "90%",
+    height: "100%",
+    background: "linear-gradient(90deg, #22c55e, #10b981)",
+  },
+  blueButton: {
+    width: "100%",
+    padding: "12px",
+    marginTop: "10px",
+    border: "none",
+    borderRadius: "10px",
+    background: "#2563eb",
+    color: "white",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  greenButton: {
+    width: "100%",
+    padding: "12px",
+    marginTop: "10px",
+    border: "none",
+    borderRadius: "10px",
+    background: "#16a34a",
+    color: "white",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  status: {
+    marginTop: "12px",
+    padding: "12px 16px",
+    background: "#1e2b45",
+    borderRadius: "12px",
+    textAlign: "center",
+    fontWeight: 700,
+  },
+  coachBox: {
+    background: "#0f1b31",
+    borderLeft: "4px solid #22c55e",
+    padding: "12px",
+    borderRadius: "8px",
+    lineHeight: 1.5,
+  },
+  moveHistory: {
+    maxHeight: "300px",
+    overflowY: "auto",
+  },
+  moveRow: {
+    display: "grid",
+    gridTemplateColumns: "38px 1fr 1fr",
+    gap: "8px",
+    padding: "8px",
+    marginBottom: "5px",
+    background: "#0f1b31",
+    borderRadius: "8px",
+  },
 };
