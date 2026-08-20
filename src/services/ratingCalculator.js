@@ -35,7 +35,7 @@ export function calculateNewRating(
   opponentRating,
   result
 ) {
-  const ratingChange = calculateRatingChange(
+  const change = calculateRatingChange(
     playerRating,
     opponentRating,
     result
@@ -49,29 +49,28 @@ export function calculateNewRating(
       playerRating,
       opponentRating
     ),
-    change: ratingChange,
+    change,
     newRating: Math.max(
       100,
-      playerRating + ratingChange
+      playerRating + change
     ),
   };
 }
 
 export function loadTrainingRating() {
-  const savedRating = window.localStorage.getItem(
-    STORAGE_KEY
-  );
+  const storedValue =
+    window.localStorage.getItem(STORAGE_KEY);
 
-  const parsedRating = Number(savedRating);
+  const parsedValue = Number(storedValue);
 
   if (
-    !Number.isFinite(parsedRating) ||
-    parsedRating < 100
+    !Number.isFinite(parsedValue) ||
+    parsedValue < 100
   ) {
     return DEFAULT_RATING;
   }
 
-  return parsedRating;
+  return parsedValue;
 }
 
 export function saveTrainingRating(rating) {
@@ -82,11 +81,7 @@ export function saveTrainingRating(rating) {
 }
 
 export function resetTrainingRating() {
-  window.localStorage.setItem(
-    STORAGE_KEY,
-    String(DEFAULT_RATING)
-  );
-
+  saveTrainingRating(DEFAULT_RATING);
   return DEFAULT_RATING;
 }
 
