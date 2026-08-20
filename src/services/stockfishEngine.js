@@ -1,4 +1,3 @@
-cat > src/services/stockfishEngine.js <<'EOF'
 export class StockfishEngine {
   constructor() {
     this.worker = null;
@@ -18,7 +17,7 @@ export class StockfishEngine {
 
     return new Promise((resolve, reject) => {
       const enginePath =
-        `${import.meta.env.BASE_URL}stockfish/stockfish-18-lite.js`;
+        `${import.meta.env.BASE_URL}stockfish/stockfish-18-lite-single.js`;
 
       try {
         this.worker = new Worker(enginePath);
@@ -288,4 +287,3 @@ export class StockfishEngine {
 
 export const stockfishEngine =
   new StockfishEngine();
-EOF
