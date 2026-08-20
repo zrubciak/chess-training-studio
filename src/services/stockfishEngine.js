@@ -2,6 +2,7 @@ export class StockfishEngine {
   constructor() {
     this.worker = null;
     this.ready = false;
+
     this.onReady = null;
     this.onBestMove = null;
     this.onEvaluation = null;
@@ -25,6 +26,8 @@ export class StockfishEngine {
             ? event.data
             : String(event.data);
 
+        console.log("Stockfish:", message);
+
         if (message === "uciok") {
           this.worker.postMessage("isready");
           return;
@@ -47,14 +50,21 @@ export class StockfishEngine {
           const mateMatch =
             message.match(/score mate (-?\d+)/);
 
-          if (centipawnMatch && this.onEvaluation) {
+          if (
+            centipawnMatch &&
+            this.onEvaluation
+          ) {
             this.onEvaluation({
               type: "centipawn",
-              value: Number(centipawnMatch[1]) / 100,
+              value:
+                Number(centipawnMatch[1]) / 100,
             });
           }
 
-          if (mateMatch && this.onEvaluation) {
+          if (
+            mateMatch &&
+            this.onEvaluation
+          ) {
             this.onEvaluation({
               type: "mate",
               value: Number(mateMatch[1]),
@@ -77,7 +87,11 @@ export class StockfishEngine {
       };
 
       this.worker.onerror = (error) => {
-        console.error("Stockfish chyba:", error);
+        console.error(
+          "Stockfish Worker chyba:",
+          error
+        );
+
         this.ready = false;
 
         if (this.onError) {
@@ -87,7 +101,12 @@ export class StockfishEngine {
 
       this.worker.postMessage("uci");
     } catch (error) {
-      console.error("Stockfish sa nepodarilo spustiť:", error);
+      console.error(
+        "Stockfish sa nepodarilo spustiť:",
+        error
+      );
+
+      this.ready = false;
 
       if (this.onError) {
         this.onError(error);
@@ -109,7 +128,8 @@ export class StockfishEngine {
       1500: 7,
     };
 
-    const skillLevel = skillMap[numericElo] ?? 2;
+    const skillLevel =
+      skillMap[numericElo] ?? 2;
 
     this.worker.postMessage(
       "setoption name UCI_LimitStrength value false"
@@ -118,6 +138,8 @@ export class StockfishEngine {
     this.worker.postMessage(
       `setoption name Skill Level value ${skillLevel}`
     );
+
+    this.worker.postMessage("isready");
   }
 
   findBestMove(fen, depth = 10) {
@@ -126,8 +148,28 @@ export class StockfishEngine {
     }
 
     this.worker.postMessage("stop");
-    this.worker.postMessage(`position fen ${fen}`);
-    this.worker.postMessage(`go depth ${depth}`);
+    this.worker.postMessage(
+      `position fen ${fen}`
+    );
+    this.worker.postMessage(
+      `go depth ${depth}`
+    );
+
+    return true;
+  }
+
+  analyzePosition(fen, depth = 12) {
+    if (!this.worker || !this.ready) {
+      return false;
+    }
+
+    this.worker.postMessage("stop");
+    this.worker.postMessage(
+      `position fen ${fen}`
+    );
+    this.worker.postMessage(
+      `go depth ${depth}`
+    );
 
     return true;
   }
@@ -155,9 +197,11 @@ export class StockfishEngine {
 
     this.worker.postMessage("quit");
     this.worker.terminate();
+
     this.worker = null;
     this.ready = false;
   }
 }
 
-export const stockfishEngine = new StockfishEngine();
+export const stockfishEngine =
+  new StockfishEngine();
