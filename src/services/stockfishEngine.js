@@ -288,3 +288,4 @@ export class StockfishEngine {
 
 export const stockfishEngine =
   new StockfishEngine();
+EOF
