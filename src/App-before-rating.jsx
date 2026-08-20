@@ -1,14 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
-import { stockfishEngine } from "./services/stockfishEngine";
-import {
-  calculateNewRating,
-  getResultLabel,
-  loadTrainingRating,
-  saveTrainingRating,
-  resetTrainingRating,
-} from "./services/ratingCalculator";
 
 const PIECE_VALUES = {
   p: 1,
@@ -24,18 +16,7 @@ export default function App() {
   const [moves, setMoves] = useState([]);
   const [boardOrientation, setBoardOrientation] = useState("white");
   const [computerElo, setComputerElo] = useState(1000);
-  const [trainingRating, setTrainingRating] = useState(
-    () => loadTrainingRating()
-  );
-  const [ratingResult, setRatingResult] = useState(null);
-
-  const ratingProcessedRef = useRef(false);
-  const trainingRatingRef = useRef(
-    loadTrainingRating()
-  );
   const [isComputerThinking, setIsComputerThinking] = useState(false);
-  const [stockfishStatus, setStockfishStatus] =
-    useState("Načítava sa");
   const [gameStatus, setGameStatus] = useState("Na ťahu: biely");
   const [coachMessage, setCoachMessage] = useState(
     "Urob prvý ťah. Odporúčam e4 alebo d4."
@@ -43,92 +24,6 @@ export default function App() {
 
   const gameRef = useRef(new Chess());
   const timerRef = useRef(null);
-
-  useEffect(() => {
-    let componentActive = true;
-
-    async function startStockfish() {
-      try {
-        setStockfishStatus("Načítava sa");
-
-        await stockfishEngine.init();
-
-        if (!componentActive) {
-          return;
-        }
-
-        stockfishEngine.setLevel(computerElo);
-        setStockfishStatus("Pripravený");
-      } catch (error) {
-        console.error(
-          "Stockfish inicializácia zlyhala:",
-          error
-        );
-
-        if (componentActive) {
-          setStockfishStatus("Chyba načítania");
-        }
-      }
-    }
-
-    startStockfish();
-
-    return () => {
-      componentActive = false;
-      stockfishEngine.stop();
-    };
-  }, []);
-
-  function processFinishedGame(currentGame) {
-    if (
-      !currentGame.isGameOver() ||
-      ratingProcessedRef.current
-    ) {
-      return;
-    }
-
-    let result = 0.5;
-
-    if (currentGame.isCheckmate()) {
-      result =
-        currentGame.turn() === "w" ? 0 : 1;
-    }
-
-    const calculation = calculateNewRating(
-      trainingRatingRef.current,
-      computerElo,
-      result
-    );
-
-    ratingProcessedRef.current = true;
-    trainingRatingRef.current =
-      calculation.newRating;
-
-    setTrainingRating(calculation.newRating);
-    setRatingResult({
-      ...calculation,
-      label: getResultLabel(result),
-    });
-
-    saveTrainingRating(
-      calculation.newRating
-    );
-  }
-
-  function resetRating() {
-    const defaultRating =
-      resetTrainingRating();
-
-    trainingRatingRef.current =
-      defaultRating;
-
-    setTrainingRating(defaultRating);
-    setRatingResult(null);
-
-    setCoachMessage(
-      "Tréningové ELO bolo resetované na 900."
-    );
-  }
 
   function describePosition(currentGame) {
     if (currentGame.isCheckmate()) {
@@ -308,7 +203,6 @@ export default function App() {
       setGame(computerGame);
       setMoves(computerGame.history());
       setGameStatus(describePosition(computerGame));
-      processFinishedGame(computerGame);
       setIsComputerThinking(false);
 
       if (computerGame.isCheckmate()) {
@@ -355,7 +249,6 @@ export default function App() {
     setMoves(gameCopy.history());
     setGameStatus(describePosition(gameCopy));
     setCoachMessage(getCoachComment(move, gameCopy));
-    processFinishedGame(gameCopy);
 
     if (!gameCopy.isGameOver()) {
       makeComputerMove(gameCopy);
@@ -374,8 +267,6 @@ export default function App() {
     gameRef.current = freshGame;
     setGame(freshGame);
     setMoves([]);
-    ratingProcessedRef.current = false;
-    setRatingResult(null);
     setIsComputerThinking(false);
     setGameStatus("Na ťahu: biely");
     setCoachMessage(
@@ -418,29 +309,12 @@ export default function App() {
         <aside style={styles.panel}>
           <h2>👤 Profil</h2>
           <p><strong>Ivan Zrubec</strong></p>
-          <p>Tréningové ELO: <strong>{trainingRating}</strong></p>
+          <p>Aktuálne ELO: 900</p>
           <p>Cieľ: 1000+</p>
 
           <hr style={styles.divider} />
 
           <h3>🤖 Automatický súper</h3>
-
-          <div style={styles.engineStatusBox}>
-            <span>Stockfish:</span>
-
-            <strong
-              style={{
-                color:
-                  stockfishStatus === "Pripravený"
-                    ? "#22c55e"
-                    : stockfishStatus === "Chyba načítania"
-                      ? "#ef4444"
-                      : "#f59e0b",
-              }}
-            >
-              {stockfishStatus}
-            </strong>
-          </div>
 
           <label htmlFor="computerElo">Úroveň súpera</label>
 
@@ -465,58 +339,6 @@ export default function App() {
           </div>
 
           <p style={{ textAlign: "center" }}>900 / 1000</p>
-
-          <div style={styles.ratingBox}>
-            <strong>📊 Posledný výsledok</strong>
-
-            {ratingResult ? (
-              <>
-                <p style={{ marginBottom: "6px" }}>
-                  Výsledok: {ratingResult.label}
-                </p>
-
-                <p style={{ marginBottom: "6px" }}>
-                  Súper: ELO {ratingResult.opponentRating}
-                </p>
-
-                <p style={{ marginBottom: "6px" }}>
-                  Pred partiou: {ratingResult.oldRating}
-                </p>
-
-                <p style={{ marginBottom: "6px" }}>
-                  Zmena:{" "}
-                  <strong
-                    style={{
-                      color:
-                        ratingResult.change >= 0
-                          ? "#22c55e"
-                          : "#ef4444",
-                    }}
-                  >
-                    {ratingResult.change >= 0 ? "+" : ""}
-                    {ratingResult.change}
-                  </strong>
-                </p>
-
-                <p style={{ marginBottom: 0 }}>
-                  Nové ELO:{" "}
-                  <strong>{ratingResult.newRating}</strong>
-                </p>
-              </>
-            ) : (
-              <p style={{ color: "#cbd5e1" }}>
-                Dokonči partiu, aby sa prepočítalo ELO.
-              </p>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={resetRating}
-            style={styles.orangeButton}
-          >
-            ♻️ Reset ELO na 900
-          </button>
 
           <button
             type="button"
@@ -637,16 +459,6 @@ const styles = {
     borderTop: "1px solid #64748b",
     margin: "20px 0",
   },
-  engineStatusBox: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "12px",
-    padding: "12px",
-    marginBottom: "14px",
-    background: "#0f1b31",
-    borderRadius: "10px",
-    border: "1px solid #334155",
-  },
   select: {
     width: "100%",
     marginTop: "8px",
@@ -716,24 +528,5 @@ const styles = {
     marginBottom: "5px",
     background: "#0f1b31",
     borderRadius: "8px",
-  },
-  ratingBox: {
-    marginTop: "16px",
-    marginBottom: "10px",
-    padding: "12px",
-    background: "#0f1b31",
-    borderRadius: "10px",
-    borderLeft: "4px solid #f59e0b",
-  },
-  orangeButton: {
-    width: "100%",
-    padding: "12px",
-    marginTop: "10px",
-    border: "none",
-    borderRadius: "10px",
-    background: "#d97706",
-    color: "white",
-    fontWeight: 700,
-    cursor: "pointer",
   },
 };

@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
-import { stockfishEngine } from "./services/stockfishEngine";
 import {
   calculateNewRating,
   getResultLabel,
@@ -34,8 +33,6 @@ export default function App() {
     loadTrainingRating()
   );
   const [isComputerThinking, setIsComputerThinking] = useState(false);
-  const [stockfishStatus, setStockfishStatus] =
-    useState("Načítava sa");
   const [gameStatus, setGameStatus] = useState("Na ťahu: biely");
   const [coachMessage, setCoachMessage] = useState(
     "Urob prvý ťah. Odporúčam e4 alebo d4."
@@ -43,41 +40,6 @@ export default function App() {
 
   const gameRef = useRef(new Chess());
   const timerRef = useRef(null);
-
-  useEffect(() => {
-    let componentActive = true;
-
-    async function startStockfish() {
-      try {
-        setStockfishStatus("Načítava sa");
-
-        await stockfishEngine.init();
-
-        if (!componentActive) {
-          return;
-        }
-
-        stockfishEngine.setLevel(computerElo);
-        setStockfishStatus("Pripravený");
-      } catch (error) {
-        console.error(
-          "Stockfish inicializácia zlyhala:",
-          error
-        );
-
-        if (componentActive) {
-          setStockfishStatus("Chyba načítania");
-        }
-      }
-    }
-
-    startStockfish();
-
-    return () => {
-      componentActive = false;
-      stockfishEngine.stop();
-    };
-  }, []);
 
   function processFinishedGame(currentGame) {
     if (
@@ -425,23 +387,6 @@ export default function App() {
 
           <h3>🤖 Automatický súper</h3>
 
-          <div style={styles.engineStatusBox}>
-            <span>Stockfish:</span>
-
-            <strong
-              style={{
-                color:
-                  stockfishStatus === "Pripravený"
-                    ? "#22c55e"
-                    : stockfishStatus === "Chyba načítania"
-                      ? "#ef4444"
-                      : "#f59e0b",
-              }}
-            >
-              {stockfishStatus}
-            </strong>
-          </div>
-
           <label htmlFor="computerElo">Úroveň súpera</label>
 
           <select
@@ -636,16 +581,6 @@ const styles = {
     border: "none",
     borderTop: "1px solid #64748b",
     margin: "20px 0",
-  },
-  engineStatusBox: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "12px",
-    padding: "12px",
-    marginBottom: "14px",
-    background: "#0f1b31",
-    borderRadius: "10px",
-    border: "1px solid #334155",
   },
   select: {
     width: "100%",
