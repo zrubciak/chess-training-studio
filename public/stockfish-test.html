@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  />
+
+  <title>Stockfish test</title>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 30px;
+      background: #071226;
+      color: white;
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+
+    .card {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 24px;
+      background: #1e2b45;
+      border-radius: 16px;
+    }
+
+    button {
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    #status {
+      margin-top: 18px;
+      padding: 14px;
+      background: #0f1b31;
+      border-radius: 10px;
+    }
+
+    #log {
+      max-height: 350px;
+      overflow-y: auto;
+      margin-top: 18px;
+      padding: 14px;
+      background: #020617;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    .success {
+      color: #22c55e;
+    }
+
+    .error {
+      color: #ef4444;
+    }
+
+    .pending {
+      color: #f59e0b;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h1>♟️ Stockfish test</h1>
+
+    <p>
+      Tento test overí, či sa Stockfish Worker a WebAssembly
+      načítajú v prehliadači.
+    </p>
+
+    <button id="startButton">
+      Spustiť test Stockfishu
+    </button>
+
+    <div id="status" class="pending">
+      Stockfish zatiaľ nebol spustený.
+    </div>
+
+    <div id="log">Čakám na spustenie testu...</div>
+  </div>
+
+  <script>
+    const button = document.getElementById("startButton");
+    const status = document.getElementById("status");
+    const log = document.getElementById("log");
+
+    let worker = null;
+
+    function addLog(message) {
+      log.textContent += "\n" + message;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    button.addEventListener("click", () => {
+      if (worker) {
+        worker.terminate();
+      }
+
+      status.className = "pending";
+      status.textContent = "Stockfish sa načítava...";
+
+      log.textContent = "Vytváram Stockfish Worker...";
+
+      try {
+        worker = new Worker(
+          "./stockfish/stockfish-18-lite.js"
+        );
+
+        worker.onmessage = (event) => {
+          const message = String(event.data);
+
+          addLog(message);
+
+          if (message === "uciok") {
+            status.textContent =
+              "UCI je pripravené. Overujem engine...";
+
+            worker.postMessage("isready");
+          }
+
+          if (message === "readyok") {
+            status.className = "success";
+            status.textContent =
+              "✅ Stockfish je pripravený a funguje.";
+
+            worker.postMessage(
+              "position startpos moves e2e4"
+            );
+
+            worker.postMessage("go depth 8");
+          }
+
+          if (message.startsWith("bestmove")) {
+            addLog(
+              "TEST ÚSPEŠNÝ – " + message
+            );
+          }
+        };
+
+        worker.onerror = (error) => {
+          status.className = "error";
+          status.textContent =
+            "❌ Stockfish sa nepodarilo načítať.";
+
+          addLog(
+            "Worker chyba: " +
+              (error.message || "neznáma chyba")
+          );
+        };
+
+        worker.postMessage("uci");
+      } catch (error) {
+        status.className = "error";
+        status.textContent =
+          "❌ Prehliadač nedokázal vytvoriť Worker.";
+
+        addLog(
+          "Chyba: " +
+            (error.message || String(error))
+        );
+      }
+    });
+  </script>
+</body>
+</html>
